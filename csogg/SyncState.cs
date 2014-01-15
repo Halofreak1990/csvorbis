@@ -100,17 +100,18 @@ namespace csogg
 		//  n) page synced at current location; page length n bytes
 		private Page pageseek_p=new Page();
 		private  byte[] chksum=new byte[4];
+
 		public int pageseek(Page og)
 		{
 			int page=returned;
 			int next;
 			int bytes=fill-returned;
-  
+
 			if(headerbytes==0)
 			{
 				int _headerbytes,i;
 				if(bytes<27)return(0); // not enough for a header
-    
+
 				/* verify capture pattern */
 				//!!!!!!!!!!!
 				if(data[page]!='O' ||
@@ -120,7 +121,7 @@ namespace csogg
 				{
 					headerbytes=0;
 					bodybytes=0;
-  
+
 					// search for possible capture
 					next=0;
 					for(int ii=0; ii<bytes-1; ii++)
@@ -135,23 +136,23 @@ namespace csogg
 				}
 				_headerbytes=(data[page+26]&0xff)+27;
 				if(bytes<_headerbytes)return(0); // not enough for header + seg table
-    
+
 				// count up body length in the segment table
-    
+
 				for(i=0;i<(data[page+26]&0xff);i++)
 				{
 					bodybytes+=(data[page+27+i]&0xff);
 				}
 				headerbytes=_headerbytes;
 			}
-  
+
 			if(bodybytes+headerbytes>bytes)return(0);
-  
+
 			// The whole test page is buffered.  Verify the checksum
 			lock(chksum)
 			{
 				// Grab the checksum bytes, set the header field to zero
-    
+
 				Array.Copy(data, page+22, chksum, 0, 4);
 				data[page+22]=0;
 				data[page+23]=0;
@@ -247,24 +248,27 @@ namespace csogg
 
 			while(true)
 			{
-				int ret=pageseek(og);
-				if(ret>0)
+				int ret = pageseek(og);
+
+				if(ret > 0)
 				{
 					// have a page
-					return(1);
+					return 1;
 				}
-				if(ret==0)
+
+				if(ret == 0)
 				{
 					// need more data
-					return(0);
+					return 0;
 				}
-    
+
 				// head did not start a synced page... skipped some bytes
-				if(unsynced==0)
+				if(unsynced == 0)
 				{
 					unsynced=1;
-					return(-1);
+					return -1;
 				}
+
 				// loop. keep looking
 			}
 		}
@@ -272,12 +276,12 @@ namespace csogg
 		// clear things to an initial state.  Good to call, eg, before seeking
 		public int reset()
 		{
-			fill=0;
-			returned=0;
-			unsynced=0;
-			headerbytes=0;
-			bodybytes=0;
-			return(0);
+			fill = 0;
+			returned = 0;
+			unsynced = 0;
+			headerbytes = 0;
+			bodybytes = 0;
+			return 0;
 		}
 		public void init(){}
 

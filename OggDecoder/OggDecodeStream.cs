@@ -31,34 +31,51 @@ namespace OggDecoder
 		private Stream decodedStream;
 		private const int HEADER_SIZE = 36;
 
+		#region Constructors
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="input"></param>
+		/// <param name="skipWavHeader"></param>
 		public OggDecodeStream(Stream input, bool skipWavHeader)
 		{
 			if (input == null)
+			{
 				throw new ArgumentNullException("input");
+			}
+
 			decodedStream = DecodeStream(input, skipWavHeader);
 		}
 
-		public OggDecodeStream(Stream input):this(input, false)
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="input"></param>
+		public OggDecodeStream(Stream input)
+			: this(input, false)
 		{
 		}
+		#endregion
 
 		Stream DecodeStream(Stream input, bool skipWavHeader)
 		{
-			int convsize=4096*2;
-			byte[] convbuffer=new byte[convsize]; // take 8k out of the data segment, not the stack
+			int convsize= 4096 * 2;
+			byte[] convbuffer = new byte[convsize]; // take 8k out of the data segment, not the stack
 
 			TextWriter s_err = new DebugWriter();
 			Stream output = new MemoryStream();
 
-			if(!skipWavHeader)
+			if (!skipWavHeader)
+			{
 				output.Seek(HEADER_SIZE, SeekOrigin.Begin); // reserve place for WAV header
+			}
 
 			SyncState oy = new SyncState(); // sync and verify incoming physical bitstream
 			StreamState os = new StreamState(); // take physical pages, weld into a logical stream of packets
 			Page og = new Page(); // one Ogg bitstream page.  Vorbis packets are inside
 			Packet op = new Packet(); // one raw packet of data for decode
 
-			Info vi = new Info();  // struct that stores all the static vorbis bitstream settings
+			Info vi = new Info(); // struct that stores all the static vorbis bitstream settings
 			Comment vc = new Comment(); // struct that stores all the bitstream user comments
 			DspState vd = new DspState(); // central working state for the packet->PCM decoder
 			Block vb = new Block(vd); // local working space for packet->PCM decode
@@ -82,6 +99,7 @@ namespace OggDecoder
 				// submit a 4k block to libvorbis' Ogg layer
 				int index = oy.buffer(4096);
 				buffer = oy.data;
+
 				try
 				{
 					bytes = input.Read(buffer, index, 4096);
@@ -90,6 +108,7 @@ namespace OggDecoder
 				{
 					s_err.WriteLine(e);
 				}
+
 				oy.wrote(bytes);
 
 				// Get the first page.
@@ -150,7 +169,6 @@ namespace OggDecoder
 				{
 					while (i < 2)
 					{
-
 						int result = oy.pageout(og);
 						if (result == 0) break; // Need more data
 						// Don't complain about missing or corrupt data yet.  We'll
@@ -164,21 +182,29 @@ namespace OggDecoder
 							while (i < 2)
 							{
 								result = os.packetout(op);
-								if (result == 0) break;
+
+								if (result == 0)
+								{
+									break;
+								}
+
 								if (result == -1)
 								{
 									// Uh oh; data at some point was corrupted or missing!
 									// We can't tolerate that in a header.  Die.
 									s_err.WriteLine("Corrupt secondary header.  Exiting.");
 								}
+
 								vi.synthesis_headerin(vc, op);
 								i++;
 							}
 						}
 					}
+
 					// no harm in not checking before adding more
 					index = oy.buffer(4096);
 					buffer = oy.data;
+
 					try
 					{
 						bytes = input.Read(buffer, index, 4096);
@@ -187,10 +213,12 @@ namespace OggDecoder
 					{
 						s_err.WriteLine(e);
 					}
+
 					if (bytes == 0 && i < 2)
 					{
 						s_err.WriteLine("End of file before finding all Vorbis headers!");
 					}
+
 					oy.wrote(bytes);
 				}
 
@@ -198,11 +226,17 @@ namespace OggDecoder
 				// decoding
 				{
 					byte[][] ptr = vc.user_comments;
+
 					for (int j = 0; j < vc.user_comments.Length; j++)
 					{
-						if (ptr[j] == null) break;
+						if (ptr[j] == null)
+						{
+							break;
+						}
+
 						s_err.WriteLine(vc.getComment(j));
 					}
+
 					s_err.WriteLine("\nBitstream is " + vi.channels + " channel, " + vi.rate + "Hz");
 					s_err.WriteLine("Encoded by: " + vc.getVendor() + "\n");
 				}
@@ -221,14 +255,19 @@ namespace OggDecoder
 
 				float[][][] _pcm = new float[1][][];
 				int[] _index = new int[vi.channels];
+
 				// The rest is just a straight decode loop until end of stream
 				while (eos == 0)
 				{
 					while (eos == 0)
 					{
-
 						int result = oy.pageout(og);
-						if (result == 0) break; // need more data
+
+						if (result == 0)
+						{
+							break; // need more data
+						}
+
 						if (result == -1)
 						{ // missing or corrupt data at this page position
 							s_err.WriteLine("Corrupt or missing data in bitstream; continuing...");
@@ -241,7 +280,11 @@ namespace OggDecoder
 							{
 								result = os.packetout(op);
 
-								if (result == 0) break; // need more data
+								if (result == 0)
+								{
+									break; // need more data
+								}
+
 								if (result == -1)
 								{ // missing or corrupt data at this page position
 									// no reason to complain; already complained above
@@ -250,6 +293,7 @@ namespace OggDecoder
 								{
 									// we have a packet.  Decode it
 									int samples;
+
 									if (vb.synthesis(op) == 0)
 									{ // test for success!
 										vd.synthesis_blockin(vb);
@@ -273,6 +317,7 @@ namespace OggDecoder
 											int ptr = i * 2;
 											//int ptr=i;
 											int mono = _index[i];
+
 											for (int j = 0; j < bout; j++)
 											{
 												int val = (int)(pcm[i][mono + j] * 32767.0);
@@ -284,12 +329,18 @@ namespace OggDecoder
 													val = 32767;
 													clipflag = true;
 												}
+
 												if (val < -32768)
 												{
 													val = -32768;
 													clipflag = true;
 												}
-												if (val < 0) val = val | 0x8000;
+
+												if (val < 0)
+												{
+													val = val | 0x8000;
+												}
+
 												convbuffer[ptr] = (byte)(val);
 												convbuffer[ptr + 1] = (byte)((uint)val >> 8);
 												ptr += 2 * (vi.channels);
@@ -309,13 +360,19 @@ namespace OggDecoder
 									}
 								}
 							}
-							if (og.eos() != 0) eos = 1;
+
+							if (og.eos() != 0)
+							{
+								eos = 1;
+							}
 						}
 					}
+
 					if (eos == 0)
 					{
 						index = oy.buffer(4096);
 						buffer = oy.data;
+
 						try
 						{
 							bytes = input.Read(buffer, index, 4096);
@@ -324,8 +381,13 @@ namespace OggDecoder
 						{
 							s_err.WriteLine(e);
 						}
+
 						oy.wrote(bytes);
-						if (bytes == 0) eos = 1;
+
+						if (bytes == 0)
+						{
+							eos = 1;
+						}
 					}
 				}
 
@@ -347,11 +409,13 @@ namespace OggDecoder
 			s_err.WriteLine("Done.");
 
 			output.Seek(0, SeekOrigin.Begin);
+
 			if (!skipWavHeader)
 			{
-				WriteHeader(output, (int)(output.Length - HEADER_SIZE), vi.rate, (ushort)16, (ushort)vi.channels);
+				WriteHeader(output, (int)(output.Length - HEADER_SIZE), vi.rate, 16, (ushort)vi.channels);
 				output.Seek(0, SeekOrigin.Begin);
 			}
+
 			return output;
 		}
 
